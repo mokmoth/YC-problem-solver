@@ -38,6 +38,9 @@ temp_problem_ids.json
 auto_problem_solver/output/
 auto_problem_solver_debug.log
 .env
+auto_problem_solver/.encryption_key
+auto_problem_solver/auto_problem_solver/output/
+*.xlsx
 
 # OS specific
 .DS_Store
