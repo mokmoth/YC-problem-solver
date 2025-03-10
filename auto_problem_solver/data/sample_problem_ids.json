@@ -1,0 +1,10 @@
+{
+  "小学": {
+    "数学": ["problem_id_1", "problem_id_2"],
+    "语文": ["problem_id_3", "problem_id_4"]
+  },
+  "初中": {
+    "数学": ["problem_id_5", "problem_id_6"],
+    "物理": ["problem_id_7", "problem_id_8"]
+  }
+} 
