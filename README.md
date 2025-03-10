@@ -17,8 +17,8 @@
 1. 克隆仓库：
 
 ```bash
-git clone https://github.com/yourusername/auto-problem-solver.git
-cd auto-problem-solver
+git clone https://github.com/mokmoth/YC-problem-solver.git
+cd YC-problem-solver
 ```
 
 2. 安装依赖：
