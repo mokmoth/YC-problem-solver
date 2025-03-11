@@ -10,12 +10,19 @@ PROBLEM_API_HEADERS = {"Content-Type": "application/json;charset=utf-8"}
 ARK_API_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 ARK_API_MODEL = "ep-20250208102341-sjk9f"  # 默认模型ID，可在前端修改
 
+# 多模态支持配置
+ENABLE_MULTIMODAL = True  # 默认启用多模态支持
+
 # 默认提示词模板
 DEFAULT_PROMPT_TEMPLATE = """你作为一名专业的<subject>{subject}</subject><grade>{grade}</grade>老师，要解答<type>{type}</type>题目。
 
 题目是：<question>{question}</question>
 
 请按照考试答题标准，给出详细的解题过程，并得出最终答案。在完成解题后，将解得的答案与标准答案<correctAnswers>{correctAnswers}</correctAnswers>进行对比，确保作答正确，如果答案不一致需要重新作答。
+
+【重要】：本题目可能包含图片和选项。如果你看到了图片，请首先详细描述图片中的内容，然后再进行解题。图片可能出现在题目或标准答案中，请仔细观察并利用图片中的信息进行解答。如果你没有看到图片，请明确说明。
+
+如果题目是选择题，请分析每个选项，说明为什么选择或排除该选项。最终答案应该是选项的字母（如A、B、C、D）。
 
 请在<解题>标签内写下详细的解题过程和最终答案，在<对比>标签内说明答案与标准答案对比的情况，是否一致。
 
@@ -44,4 +51,4 @@ MAX_WORKERS = 5  # 最大并发数
 
 # 输出配置
 OUTPUT_DIR = "auto_problem_solver/output"
-DEFAULT_OUTPUT_FILENAME = "problem_solutions.xlsx" 
+DEFAULT_OUTPUT_FILENAME = "problem_solutions.xlsx"

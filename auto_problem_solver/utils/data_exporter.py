@@ -13,13 +13,10 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import OUTPUT_DIR, DEFAULT_OUTPUT_FILENAME
 from utils.text_formatter import format_problem_data
+from utils.logger import get_logger
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("DataExporter")
+# 获取日志记录器
+logger = get_logger("DataExporter")
 
 class DataExporter:
     """数据导出类"""

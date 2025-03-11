@@ -17,12 +17,32 @@ def format_latex_for_readability(text):
     if not text or not isinstance(text, str):
         return text
     
+    # 保存图片URL，避免处理图片URL中的内容
+    img_urls = []
+    img_placeholders = []
+    
+    # 提取图片URL
+    img_pattern = r'<div>?\s*<img src=[\'"]([^\'"]+)[\'"][^>]*>\s*</div>?'
+    for i, match in enumerate(re.finditer(img_pattern, text)):
+        img_url = match.group(1)
+        img_urls.append(img_url)
+        placeholder = f"__IMG_URL_PLACEHOLDER_{i}__"
+        img_placeholders.append(placeholder)
+        text = text.replace(match.group(0), placeholder)
+    
+    # 保存特殊的LaTeX公式分隔符
+    special_patterns = [
+        (r'\$\(\\:\\:\\:\)\$', '$$LATEX_COLON_PLACEHOLDER$$'),
+        (r'\$\(\\\\:\\\\:\\\\:\)\$', '$$LATEX_COLON_PLACEHOLDER$$'),
+        (r'\(\\\\:\\\\:\\\\:\)', '$$LATEX_COLON_PLACEHOLDER_NO_DOLLAR$$')
+    ]
+    
+    # 替换特殊的LaTeX公式分隔符为占位符
+    for pattern, placeholder in special_patterns:
+        text = text.replace(pattern, placeholder)
+    
     # 处理HTML标签 - 保留换行符
     text = text.replace('<br />', '\n').replace('<br>', '\n')
-    
-    # 处理图片标签
-    img_pattern = r'<div>?\s*<img src="([^"]+)"[^>]*>\s*</div>?'
-    text = re.sub(img_pattern, r'[图片]', text)
     
     # 处理LLM输出中的特殊转义符，如\(7\)
     text = re.sub(r'\\[\(（]([^\\]*)\\[\)）]', r'\1', text)
@@ -127,6 +147,21 @@ def format_latex_for_readability(text):
     
     # 格式化填空题
     text = re.sub(r'([=<>])\s*_____', r'\1 _____', text)  # 确保等号后有空格
+    
+    # 恢复特殊的LaTeX公式分隔符
+    text = text.replace('$$LATEX_COLON_PLACEHOLDER$$', '(:::)')
+    text = text.replace('$$LATEX_COLON_PLACEHOLDER_NO_DOLLAR$$', '(:::)')
+    
+    # 直接替换常见的LaTeX公式分隔符格式
+    text = text.replace('$(\\:\\:\\:)$', '(:::)')
+    text = text.replace('$(\\\\:\\\\:\\\\:)$', '(:::)')
+    text = text.replace('(\\:\\:\\:)', '(:::)')
+    text = text.replace('(\\\\:\\\\:\\\\:)', '(:::)')
+    
+    # 恢复图片URL
+    for i, placeholder in enumerate(img_placeholders):
+        img_tag = f"<div><img src='{img_urls[i]}' /></div>"
+        text = text.replace(placeholder, img_tag)
     
     return text
 

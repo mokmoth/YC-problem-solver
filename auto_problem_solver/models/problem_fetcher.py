@@ -7,11 +7,16 @@ import json
 import time
 import logging
 from typing import Dict, List, Any, Union
+import re
 
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import PROBLEM_API_URL, PROBLEM_API_HEADERS, MAX_RETRIES, RETRY_DELAY
+from utils.logger import get_logger
+
+# 获取日志记录器
+logger = get_logger("ProblemFetcher")
 
 # 全局映射表（常量）
 SUBJECT_MAP = [
@@ -48,13 +53,6 @@ TYPE_MAP = [
     {"id": "exam", "name": "主观题"},
     {"id": "combination", "name": "组合题"}
 ]
-
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("ProblemFetcher")
 
 class ProblemFetcher:
     """问题数据获取类"""
@@ -106,7 +104,9 @@ class ProblemFetcher:
                         "subject": "",
                         "grade": "",
                         "type": "",
-                        "id": ""
+                        "id": "",
+                        "choices": [],  # 添加选项字段
+                        "explains": []  # 添加解释字段
                     }
                     
                     # 优先使用correctAnswers字段
@@ -127,6 +127,16 @@ class ProblemFetcher:
                     item["grade"] = self._format_stage(problem.get("stageId"))
                     item["type"] = self._format_type(problem.get("type"))
                     item["id"] = problem.get("id", "")
+                    
+                    # 添加选项信息
+                    if "choices" in problem and problem["choices"]:
+                        item["choices"] = problem["choices"]
+                        logger.info(f"Problem {problem_id}: Added {len(problem['choices'])} choice groups")
+                    
+                    # 添加解释信息
+                    if "explains" in problem and problem["explains"]:
+                        item["explains"] = problem["explains"]
+                        logger.info(f"Problem {problem_id}: Added {len(problem['explains'])} explains")
                     
                     logger.debug(f"Formatted problem {problem_id}: {json.dumps(item, ensure_ascii=False)}")
                     formatted_problems.append(item)
@@ -177,7 +187,7 @@ class ProblemFetcher:
     
     def _format_body(self, problem: Dict) -> str:
         """
-        格式化问题内容
+        格式化问题内容，包括题干和选项
         
         参数:
         - problem: 问题数据
@@ -191,8 +201,64 @@ class ProblemFetcher:
         for sub in subproblems:
             body += sub.get("body", "")
         
-        # 转义特殊字符
+        # 提取图片URL，避免处理图片URL中的内容
+        img_urls = []
+        img_placeholders = []
+        
+        # 提取图片URL
+        img_pattern = r'<div>?\s*<img src="([^"]+)"[^>]*>\s*</div>?'
+        for i, match in enumerate(re.finditer(img_pattern, body)):
+            img_url = match.group(1)
+            img_urls.append(img_url)
+            placeholder = f"__IMG_URL_PLACEHOLDER_{i}__"
+            img_placeholders.append(placeholder)
+            body = body.replace(match.group(0), placeholder)
+        
+        # 转义特殊字符，但保留LaTeX公式分隔符
+        # 先保存LaTeX公式分隔符
+        latex_patterns = [
+            (r'\$\(\\:\\:\\:\)\$', '$$LATEX_COLON_PLACEHOLDER$$'),
+            (r'\$\(\\\\:\\\\:\\\\:\)\$', '$$LATEX_COLON_PLACEHOLDER$$')
+        ]
+        
+        # 替换LaTeX公式分隔符为占位符
+        for pattern, placeholder in latex_patterns:
+            body = body.replace(pattern, placeholder)
+        
+        # 转义其他特殊字符
         body = body.replace("\\", "\\\\").replace('"', "'")
+        
+        # 恢复LaTeX公式分隔符
+        body = body.replace('$$LATEX_COLON_PLACEHOLDER$$', '$(\\:\\:\\:)$')
+        
+        # 恢复图片URL
+        for i, placeholder in enumerate(img_placeholders):
+            img_tag = f"<div><img src='{img_urls[i]}' /></div>"
+            body = body.replace(placeholder, img_tag)
+        
+        # 添加选项信息（如果有）
+        if "choices" in problem and problem["choices"]:
+            choices_text = "\n\n选项：\n"
+            
+            # 遍历所有选项组
+            for group_index, choice_group in enumerate(problem["choices"]):
+                if group_index > 0:
+                    choices_text += "\n"  # 如果有多个选项组，添加分隔
+                
+                # 遍历选项组中的每个选项
+                for choice_index, choice in enumerate(choice_group):
+                    choice_label = chr(65 + choice_index)  # A, B, C, D...
+                    choice_body = choice.get("body", "")
+                    
+                    # 处理选项中的LaTeX公式和HTML标签
+                    choice_body = choice_body.replace("\\", "\\\\").replace('"', "'")
+                    
+                    # 添加选项文本
+                    choices_text += f"{choice_label}. {choice_body}\n"
+            
+            # 将选项添加到题干后面
+            body += choices_text
+        
         return body
     
     def _get_original_answer(self, problem: Dict) -> str:

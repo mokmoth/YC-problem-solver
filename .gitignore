@@ -36,12 +36,32 @@ settings.json
 *.log
 temp_problem_ids.json
 auto_problem_solver/output/
+auto_problem_solver/logs/
 auto_problem_solver_debug.log
 .env
 auto_problem_solver/.encryption_key
 auto_problem_solver/auto_problem_solver/output/
 *.xlsx
 
+# Test files
+test_*.py
+test_*.json
+*_test.py
+*_test.log
+get_raw_api_data.py
+
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Build related
+*.spec
+build_app.py
+create_icon.py
+app_launcher.py
+app_icon.png
+
+# Documentation
+项目流程.drawio
+根据学段学科分组取100道无解析的习题.json
+converted_files_by_stage_subject/ 

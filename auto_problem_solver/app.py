@@ -8,24 +8,36 @@ import json
 import time
 import logging
 import streamlit as st
+import traceback
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 # 导入自定义模块
 sys.path.append(os.path.dirname(__file__))
-from config import ARK_API_MODEL, DEFAULT_PROMPT_TEMPLATE, MAX_WORKERS
+from config import ARK_API_MODEL, DEFAULT_PROMPT_TEMPLATE, MAX_WORKERS, ENABLE_MULTIMODAL
 from main import AutoProblemSolver
+from utils.logger import get_logger, LOG_DIR, DEBUG_LOG_FILE, INFO_LOG_FILE
 
-# 设置日志
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("auto_problem_solver_debug.log", mode='w'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger("AutoProblemSolver")
+# 获取日志记录器
+logger = get_logger("App")
+
+# 检查是否有临时配置文件
+TEMP_CONFIG_PATH = os.environ.get("STREAMLIT_CONFIG_PATH")
+if TEMP_CONFIG_PATH and os.path.exists(TEMP_CONFIG_PATH):
+    try:
+        with open(TEMP_CONFIG_PATH, "r", encoding="utf-8") as f:
+            temp_config = json.load(f)
+            
+            # 覆盖默认配置
+            if "model_id" in temp_config:
+                ARK_API_MODEL = temp_config["model_id"]
+            
+            if "prompt_template" in temp_config:
+                DEFAULT_PROMPT_TEMPLATE = temp_config["prompt_template"]
+                
+        logger.info(f"从临时配置文件加载配置: {TEMP_CONFIG_PATH}")
+    except Exception as e:
+        logger.error(f"读取临时配置文件失败: {str(e)}")
 
 # 设置页面配置
 st.set_page_config(
@@ -77,6 +89,111 @@ def main():
         value=st.session_state.persistent_settings.get("model_id", ARK_API_MODEL),
         help="输入要使用的模型ID"
     )
+    
+    # 多模态支持配置
+    enable_multimodal = st.sidebar.checkbox(
+        "启用多模态支持", 
+        value=st.session_state.persistent_settings.get("enable_multimodal", ENABLE_MULTIMODAL),
+        help="启用后，程序将使用大模型的多模态能力处理题目和答案中的图片"
+    )
+    
+    # 多模态说明
+    if enable_multimodal:
+        st.sidebar.info("""
+        **多模态功能已启用**
+        
+        程序将自动检测题目和标准答案中的图片，并将图片内容发送给大模型进行处理。
+        
+        请确保您使用的模型ID对应的是具有多模态能力的大模型，否则可能会导致处理失败。
+        
+        常见的多模态大模型包括：
+        - 火山方舟多模态模型
+        - 通义千问多模态模型
+        - GPT-4V
+        """)
+        
+        # 添加多模态测试按钮
+        if st.sidebar.button("测试多模态功能"):
+            if not api_key:
+                st.sidebar.error("请先配置火山方舟API密钥")
+            else:
+                with st.sidebar.status("正在测试多模态功能..."):
+                    try:
+                        # 创建测试问题
+                        test_problem = {
+                            "id": "test_multimodal",
+                            "question": "请描述这张图片中的内容 <div><img src='https://course.yangcong345.com/cb/7e124a2217a58797addc73e79ad91559.png' /></div>",
+                            "correctAnswer": "",
+                            "subject": "地理",
+                            "grade": "初中",
+                            "type": "主观题"
+                        }
+                        
+                        # 创建LLMSolver实例
+                        from models.llm_solver import LLMSolver
+                        llm_solver = LLMSolver(
+                            api_key=api_key,
+                            model_id=model_id,
+                            enable_multimodal=True
+                        )
+                        
+                        # 调用解题方法
+                        result = llm_solver.solve_problem(test_problem)
+                        
+                        # 显示结果
+                        st.sidebar.success("多模态功能测试成功！")
+                        st.sidebar.markdown("### 测试结果")
+                        st.sidebar.markdown(result)
+                        
+                        # 判断测试是否成功
+                        if "没有看到图片" in result or "没有给出图片" in result:
+                            st.sidebar.warning("大模型似乎没有正确接收到图片。请检查您的模型ID是否支持多模态功能。")
+                        elif "地图" in result or "省级" in result or "行政区" in result:
+                            st.sidebar.success("大模型成功识别了图片内容！")
+                        else:
+                            st.sidebar.info("大模型返回了结果，但无法确定是否正确识别了图片内容。请检查返回结果。")
+                    
+                    except Exception as e:
+                        st.sidebar.error(f"测试失败: {str(e)}")
+                        st.sidebar.error(traceback.format_exc())
+    
+    # 添加日志测试按钮
+    if st.sidebar.button("测试日志系统"):
+        with st.sidebar.status("正在测试日志系统..."):
+            try:
+                # 记录各级别的日志
+                logger.debug("这是一条调试日志")
+                logger.info("这是一条信息日志")
+                logger.warning("这是一条警告日志")
+                logger.error("这是一条错误日志")
+                
+                # 检查日志文件
+                debug_log_exists = os.path.exists(DEBUG_LOG_FILE)
+                info_log_exists = os.path.exists(INFO_LOG_FILE)
+                
+                if debug_log_exists and info_log_exists:
+                    st.sidebar.success("日志系统测试成功！")
+                    st.sidebar.markdown(f"""
+                    ### 日志文件位置
+                    - 调试日志: `{DEBUG_LOG_FILE}`
+                    - 信息日志: `{INFO_LOG_FILE}`
+                    """)
+                    
+                    # 显示日志内容预览
+                    try:
+                        with open(DEBUG_LOG_FILE, "r", encoding="utf-8") as f:
+                            debug_log_content = f.readlines()[-10:]  # 最后10行
+                        
+                        st.sidebar.markdown("### 调试日志预览（最后10行）")
+                        for line in debug_log_content:
+                            st.sidebar.text(line.strip())
+                    except Exception as e:
+                        st.sidebar.warning(f"无法读取调试日志: {str(e)}")
+                else:
+                    st.sidebar.warning(f"日志文件不存在: 调试日志: {debug_log_exists}, 信息日志: {info_log_exists}")
+            except Exception as e:
+                st.sidebar.error(f"测试日志系统失败: {str(e)}")
+                st.sidebar.error(traceback.format_exc())
     
     # 提示词模板管理
     st.sidebar.subheader("提示词模板管理")
@@ -198,6 +315,7 @@ def main():
         st.session_state.persistent_settings = {
             "api_key": api_key,
             "model_id": model_id,
+            "enable_multimodal": enable_multimodal,
             "prompt_template": st.session_state.prompt_templates.get(current_template, DEFAULT_PROMPT_TEMPLATE),
             "prompt_templates": st.session_state.prompt_templates,
             "current_template_name": current_template,
@@ -210,6 +328,7 @@ def main():
             
             settings_to_save = {
                 "model_id": model_id,
+                "enable_multimodal": enable_multimodal,
                 "prompt_template": st.session_state.prompt_templates.get(current_template, DEFAULT_PROMPT_TEMPLATE),
                 "prompt_templates": st.session_state.prompt_templates,
                 "current_template_name": current_template,
@@ -325,7 +444,6 @@ def main():
                 logging.error(f"处理文件时出错: {str(e)}")
                 st.error(f"处理文件时出错: {str(e)}")
                 # 显示更详细的错误信息
-                import traceback
                 error_details = traceback.format_exc()
                 logging.error(f"错误详情: {error_details}")
                 st.error("请检查日志获取更多详细信息")
@@ -342,7 +460,8 @@ def main():
             solver = AutoProblemSolver(
                 api_key=st.session_state.api_key,
                 model_id=st.session_state.model_id,
-                prompt_template=st.session_state.prompt_template
+                prompt_template=st.session_state.prompt_template,
+                enable_multimodal=st.session_state.enable_multimodal
             )
             
             # 设置进度回调函数
@@ -470,6 +589,8 @@ if "api_key" not in st.session_state:
     st.session_state.api_key = ""
 if "model_id" not in st.session_state:
     st.session_state.model_id = ARK_API_MODEL
+if "enable_multimodal" not in st.session_state:
+    st.session_state.enable_multimodal = ENABLE_MULTIMODAL
 if "prompt_template" not in st.session_state:
     st.session_state.prompt_template = DEFAULT_PROMPT_TEMPLATE
 if "prompt_templates" not in st.session_state:

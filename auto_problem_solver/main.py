@@ -16,22 +16,15 @@ from models.problem_fetcher import ProblemFetcher
 from models.llm_solver import LLMSolver
 from utils.data_exporter import DataExporter
 from config import MAX_WORKERS
+from utils.logger import get_logger
 
-# 设置日志
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("auto_problem_solver_debug.log"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger("AutoProblemSolver")
+# 获取日志记录器
+logger = get_logger("AutoProblemSolver")
 
 class AutoProblemSolver:
     """自动化习题解析批处理工具"""
     
-    def __init__(self, api_key: Optional[str] = None, model_id: Optional[str] = None, prompt_template: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model_id: Optional[str] = None, prompt_template: Optional[str] = None, enable_multimodal: Optional[bool] = None):
         """
         初始化自动化习题解析批处理工具
         
@@ -39,9 +32,10 @@ class AutoProblemSolver:
         - api_key: 火山方舟API密钥
         - model_id: 模型ID
         - prompt_template: 提示词模板
+        - enable_multimodal: 是否启用多模态支持
         """
         self.problem_fetcher = ProblemFetcher()
-        self.llm_solver = LLMSolver(api_key, model_id, prompt_template)
+        self.llm_solver = LLMSolver(api_key, model_id, prompt_template, enable_multimodal)
         self.data_exporter = DataExporter()
         self.progress_callback = None
     
@@ -186,7 +180,7 @@ class AutoProblemSolver:
             logger.error(f"Error solving problem {problem_id}: {str(e)}")
             raise
     
-    def update_llm_config(self, api_key: Optional[str] = None, model_id: Optional[str] = None, prompt_template: Optional[str] = None):
+    def update_llm_config(self, api_key: Optional[str] = None, model_id: Optional[str] = None, prompt_template: Optional[str] = None, enable_multimodal: Optional[bool] = None):
         """
         更新大模型配置
         
@@ -194,8 +188,9 @@ class AutoProblemSolver:
         - api_key: 新的API密钥
         - model_id: 新的模型ID
         - prompt_template: 新的提示词模板
+        - enable_multimodal: 是否启用多模态支持
         """
-        self.llm_solver.update_config(api_key, model_id, prompt_template)
+        self.llm_solver.update_config(api_key, model_id, prompt_template, enable_multimodal)
 
 def parse_args():
     """解析命令行参数"""
@@ -205,6 +200,7 @@ def parse_args():
     parser.add_argument("--model-id", type=str, help="Model ID to use")
     parser.add_argument("--prompt-template", type=str, help="Custom prompt template")
     parser.add_argument("--max-workers", type=int, default=MAX_WORKERS, help="Maximum number of concurrent workers")
+    parser.add_argument("--enable-multimodal", action="store_true", help="Enable multimodal support")
     return parser.parse_args()
 
 def main():
@@ -215,7 +211,8 @@ def main():
     solver = AutoProblemSolver(
         api_key=args.api_key,
         model_id=args.model_id,
-        prompt_template=args.prompt_template
+        prompt_template=args.prompt_template,
+        enable_multimodal=args.enable_multimodal
     )
     
     # 运行批处理工具
