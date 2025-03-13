@@ -8,12 +8,14 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import json
+import io
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import OUTPUT_DIR, DEFAULT_OUTPUT_FILENAME
 from utils.text_formatter import format_problem_data
 from utils.logger import get_logger
+from utils.image_renderer import ImageRenderer
 
 # 获取日志记录器
 logger = get_logger("DataExporter")
@@ -34,6 +36,9 @@ class DataExporter:
         
         # 确保输出目录存在
         os.makedirs(self.output_dir, exist_ok=True)
+        
+        # 初始化图像渲染器
+        self.image_renderer = ImageRenderer(os.path.join(self.output_dir, 'rendered_images'))
     
     def export_to_excel(self, problems_with_solutions: List[Dict]) -> str:
         """
@@ -91,14 +96,29 @@ class DataExporter:
             # 导出路径
             export_path = os.path.join(self.output_dir, timestamped_filename)
             
+            # 渲染LLM回答为图片
+            logger.info("Rendering LLM answers to images")
+            image_paths = []
+            for idx, row in df.iterrows():
+                problem_id = row["id"]
+                llm_answer = row["llmAnswer"]
+                
+                # 渲染图片
+                image_path = self.image_renderer.render_text_to_image(llm_answer, problem_id)
+                image_paths.append(image_path)
+            
+            # 添加图片路径列
+            df["llmAnswerImagePath"] = image_paths
+            
             # 导出到Excel
             df.to_excel(export_path, index=False, engine='openpyxl')
             logger.debug(f"Exported DataFrame to {export_path}")
             
-            # 使用openpyxl添加格式化
+            # 使用openpyxl添加格式化和图片
             from openpyxl import load_workbook
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
+            from openpyxl.drawing.image import Image as XLImage
             
             # 加载工作簿
             wb = load_workbook(export_path)
@@ -114,6 +134,14 @@ class DataExporter:
                 bottom=Side(style='thin')
             )
             
+            # 在Excel中添加一个新列用于图片
+            ws.insert_cols(8)  # 在llmAnswer列之后插入一列
+            ws.cell(row=1, column=8).value = "llmAnswerImage"  # 设置列标题
+            ws.cell(row=1, column=8).font = header_font
+            ws.cell(row=1, column=8).fill = header_fill
+            ws.cell(row=1, column=8).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            ws.cell(row=1, column=8).border = thin_border
+            
             # 设置列宽
             for i, column in enumerate(columns, 1):
                 col_letter = get_column_letter(i)
@@ -125,6 +153,14 @@ class DataExporter:
                     ws.column_dimensions[col_letter].width = 60
                 else:
                     ws.column_dimensions[col_letter].width = 15
+            
+            # 设置图片列宽度
+            img_col_letter = get_column_letter(8)
+            ws.column_dimensions[img_col_letter].width = 30
+            
+            # 设置行高，为图片预留空间
+            for row_idx in range(2, len(df) + 2):
+                ws.row_dimensions[row_idx].height = 200
             
             # 设置标题行样式
             for cell in ws[1]:
@@ -138,6 +174,28 @@ class DataExporter:
                 for cell in row:
                     cell.alignment = Alignment(vertical='top', wrap_text=True)
                     cell.border = thin_border
+            
+            # 添加图片到Excel
+            for idx, image_path in enumerate(image_paths, 2):  # 从第2行开始（跳过标题行）
+                if image_path and os.path.exists(image_path):
+                    try:
+                        # 创建图片对象并设置大小
+                        img = XLImage(image_path)
+                        
+                        # 调整图片尺寸
+                        img.width = 300  # 设置图片宽度
+                        img.height = 180  # 设置图片高度
+                        
+                        # 添加图片到单元格
+                        cell = ws.cell(row=idx, column=8)
+                        cell_address = f"{img_col_letter}{idx}"
+                        ws.add_image(img, cell_address)
+                        
+                        logger.debug(f"Added image at {cell_address}")
+                    except Exception as e:
+                        logger.error(f"Failed to add image to Excel: {str(e)}")
+                        cell = ws.cell(row=idx, column=8)
+                        cell.value = f"图片生成失败: {str(e)}"
             
             # 保存工作簿
             wb.save(export_path)
